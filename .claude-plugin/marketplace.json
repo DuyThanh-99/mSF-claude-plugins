@@ -1,0 +1,11 @@
+{
+  "name": "my-plugins",
+  "owner": { "name": "Duy Thanh" },
+  "plugins": [
+    {
+      "name": "erp-sf",
+      "source": "./erp-sf",
+      "description": "Helpers for the erp-salesforce repo"
+    }
+  ]
+}
