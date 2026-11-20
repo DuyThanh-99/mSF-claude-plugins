@@ -66,22 +66,47 @@ if [[ "$cmd" =~ (SF_TARGET_ORG|SFDX_DEFAULTUSERNAME|SF_DEFAULTUSERNAME|SFDX_TARG
   ask "erp-sf guard: this command sets the target org through ${BASH_REMATCH[1]}. Confirm the target is a local scratch org."
 fi
 
-targets=""
+# Lookups loaded once: hooks run on every Bash call and must stay fast on large commands
+# (a hook that hits its timeout lets the command through).
+alias_map=""   # lines "alias<TAB>username"
+[[ -f "$HOME/.sfdx/alias.json" ]] && alias_map=$(jq -r '.orgs // {} | to_entries[] | "\(.key)\t\(.value)"' "$HOME/.sfdx/alias.json" 2>/dev/null)
+known_orgs=$'\n'
+while IFS=$'\t' read -r a _; do [[ -n "$a" ]] && known_orgs+="$a"$'\n'; done <<<"$alias_map"
+IFS=',' read -r -a shared <<<"${CLAUDE_PLUGIN_OPTION_SHARED_READ_ORGS:-staging,preprod}"
+for a in ${shared[@]+"${shared[@]}"}; do a="${a// /}"; [[ -n "$a" ]] && known_orgs+="$a"$'\n'; done
+IFS=',' read -r -a prefixes <<<"${CLAUDE_PLUGIN_OPTION_LOCAL_ORG_PREFIXES:-local_}"
+is_org_name() { [[ "$1" == *@* || "$known_orgs" == *$'\n'"$1"$'\n'* ]]; }
+
+is_local() {
+  local t=$1 username=$1 a u pre
+  if [[ "$t" != *@* ]]; then
+    while IFS=$'\t' read -r a u; do [[ "$a" == "$t" ]] && { username=$u; break; }; done <<<"$alias_map"
+  fi
+  [[ "$username" == *@example.com ]] && return 0
+  for pre in ${prefixes[@]+"${prefixes[@]}"}; do
+    pre="${pre// /}"; [[ -n "$pre" && "$t" == "$pre"* ]] && return 0
+  done
+  return 1
+}
+
+# Each org the command names is checked once, as soon as it is found.
+seen=$'\n'
 add_target() {  # $1 = raw value, $2 = where it came from
   local v=$1
   v=${v#\"}; v=${v%\"}; v=${v#\'}; v=${v%\'}
-  [[ -z "$v" ]] && return
+  [[ -z "$v" || "$seen" == *$'\n'"$v"$'\n'* ]] && return
+  seen+="$v"$'\n'
   [[ "$v" == *'$'* || "$v" == *'`'* ]] && ask "erp-sf guard: the org in $2 comes from a variable or substitution ('$1'), so it cannot be checked. Confirm it is a local scratch org."
-  targets+="$v"$'\n'
+  is_local "$v" || ask "erp-sf guard: this writes to Salesforce and names '$v' ($2), which is not a local scratch org. Shared orgs (staging, preprod, partner sandboxes, prod) are read-only unless you confirm."
 }
 val='("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:];|&)]+)'
-collect() {  # $1 = regex whose last group is the value, $2 = label
-  local rest=$cmd n
-  while [[ "$rest" =~ $1 ]]; do
+collect() {  # $1 = regex whose last group is the value, $2 = label; one grep pass over the command
+  local m n
+  while IFS= read -r m; do
+    [[ "$m" =~ $1 ]] || continue
     n=${#BASH_REMATCH[@]}
     add_target "${BASH_REMATCH[$((n - 1))]}" "$2"
-    rest=${rest#*"${BASH_REMATCH[0]}"}
-  done
+  done < <(grep -oE -- "$1" <<<"$cmd" 2>/dev/null)
 }
 # -o / --target-org anywhere in the command (quoted or not, = or space)
 collect "(^|[[:space:]])(--target-org|--org|--targetusername|-o|-u)[=[:space:]]+${val}" "a target flag"
@@ -89,13 +114,6 @@ collect "(^|[[:space:]])(--target-org|--org|--targetusername|-o|-u)[=[:space:]]+
 collect "(target-org|defaultusername)[=[:space:]]+${val}" "config set"
 # ORG=x / ORG_ALIAS=x / TARGET_ORG=x (make variables, env prefixes for mlocal and scripts)
 collect "(^|[[:space:]])[A-Z_]*(ORG|ORG_ALIAS|USERNAME)=${val}" "an ORG= assignment"
-
-# Known org names: aliases on this machine and the shared_read_orgs option.
-known_orgs=$(
-  [[ -f "$HOME/.sfdx/alias.json" ]] && jq -r '.orgs | keys[]' "$HOME/.sfdx/alias.json" 2>/dev/null
-  tr ',' '\n' <<<"${CLAUDE_PLUGIN_OPTION_SHARED_READ_ORGS:-staging,preprod}" | tr -d ' '
-)
-is_org_name() { [[ "$1" == *@* ]] || grep -qxF -- "$1" <<<"$known_orgs"; }
 
 default_org() {
   local org=${SF_TARGET_ORG:-${SFDX_DEFAULTUSERNAME:-}} d=${cwd:-$PWD} f
@@ -116,8 +134,10 @@ mlocal_org() {
 }
 
 # Per segment: a write that names no org of its own goes to the default org.
+# grep keeps only the segments that can be writes, so long commands are not walked line by line in bash.
 seg_flag='(^|[[:space:]])(--target-org|--org|--targetusername|-o|-u)[=[:space:]]|(^|[[:space:]])[A-Z_]*(ORG|ORG_ALIAS|USERNAME)='
 needs_default=0
+mlocal_seen=0
 while IFS= read -r seg; do
   is_write "$seg" || continue
   if [[ "$seg" =~ $config_set ]]; then
@@ -132,7 +152,7 @@ while IFS= read -r seg; do
   fi
   if [[ "$seg" =~ $mlocal_write ]]; then
     [[ "$seg" =~ (^|[[:space:]])--dry-run([[:space:]]|$) ]] && continue   # data plan and checks only
-    [[ "$seg" =~ $seg_flag ]] || add_target "$(mlocal_org)" "mlocal config.env"
+    if [[ $mlocal_seen -eq 0 ]] && ! [[ "$seg" =~ $seg_flag ]]; then mlocal_seen=1; add_target "$(mlocal_org)" "mlocal config.env"; fi
     continue
   fi
   [[ "$seg" =~ $seg_flag ]] && continue
@@ -142,34 +162,17 @@ while IFS= read -r seg; do
     for w in ${words[@]+"${words[@]}"}; do
       w=${w#\"}; w=${w%\"}; w=${w#\'}; w=${w%\'}
       [[ "$w" == -* || -z "$w" ]] && continue
-      if [[ "$w" == *'$'* ]]; then add_target "$w" "a script argument"; fi
+      [[ "$w" == *'$'* ]] && add_target "$w" "a script argument"
       is_org_name "$w" && { add_target "$w" "a script argument"; named=1; }
     done
     [[ $named -eq 1 ]] && continue
   fi
   needs_default=1
-done < <(awk 'BEGIN { RS = "\001" } { gsub(/&&|\|\||[;|&\n]/, "\n"); print }' <<<"$cmd")
+done < <(awk 'BEGIN { RS = "\001" } { gsub(/&&|\|\||[;|&\n]/, "\n"); print }' <<<"$cmd" \
+         | grep -E -e "$sf_write" -e "$config_set" -e "$script_run" -e "$make_write" -e "$mlocal_write" -e "$api_call" 2>/dev/null)
 if [[ $needs_default -eq 1 ]]; then
   d=$(default_org)
   [[ -z "$d" ]] && ask "erp-sf guard: this writes to a Salesforce org but no target org could be resolved. Confirm the target is a local scratch org."
-  targets+="$d"$'\n'
+  add_target "$d" "the default org"
 fi
-
-is_local() {
-  local t=$1 username=$1 pre prefixes
-  if [[ "$t" != *@* && -f "$HOME/.sfdx/alias.json" ]]; then
-    username=$(jq -r --arg a "$t" '.orgs[$a] // empty' "$HOME/.sfdx/alias.json" 2>/dev/null)
-  fi
-  [[ "$username" == *@example.com ]] && return 0
-  IFS=',' read -r -a prefixes <<<"${CLAUDE_PLUGIN_OPTION_LOCAL_ORG_PREFIXES:-local_}"
-  for pre in "${prefixes[@]}"; do
-    pre="${pre// /}"; [[ -n "$pre" && "$t" == "$pre"* ]] && return 0
-  done
-  return 1
-}
-
-while IFS= read -r t; do
-  [[ -z "$t" ]] && continue
-  is_local "$t" || ask "erp-sf guard: this writes to Salesforce and names '$t', which is not a local scratch org. Shared orgs (staging, preprod, partner sandboxes, prod) are read-only unless you confirm."
-done <<<"$targets"
 exit 0
