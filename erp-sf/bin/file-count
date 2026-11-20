@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Counts the files in the Main and Ext managed packages, as the PR placement note asks.
+#   file-count             your current tree (committed + uncommitted + untracked)
+#   file-count --compare   also the branch's merge-base with develop, and prints the difference
+# The managed build (scripts/build_package.bash) rewrites tracked files in packages/i18n, so it runs in a
+# temporary git worktree, never in your checkout. Salesforce's limit is 10,000 files per package version.
+set -uo pipefail
+export PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"   # system python first: the build parses XML, and Homebrew python can lack expat
+if ! command -v node >/dev/null; then nvm_bin=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1); [ -n "$nvm_bin" ] && export PATH="$nvm_bin:$PATH"; fi
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "Run inside erp-salesforce." >&2; exit 2; }
+cd "$root"; [ -f scripts/build_package.bash ] || { echo "No scripts/build_package.bash; is this erp-salesforce?" >&2; exit 2; }
+[ -d node_modules ] || { echo "Run npm install first (the build uses node scripts)." >&2; exit 2; }
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/file-count.XXXXXX")
+cleanup() { for w in "$tmp"/wt-*; do [ -d "$w" ] && git -C "$root" worktree remove --force "$w" >/dev/null 2>&1; done; rm -rf "${tmp:?}"; }
+trap cleanup EXIT
+
+count() {  # name commit [with-untracked]
+  local name=$1 commit=$2 wt="$tmp/wt-$1"
+  git worktree add --detach "$wt" "$commit" >/dev/null 2>&1 || { echo "worktree for $name failed" >&2; return 1; }
+  if [ "${3:-}" = with-untracked ]; then
+    git ls-files --others --exclude-standard -z | (cd "$root" && xargs -0 -I{} rsync -R "{}" "$wt/") 2>/dev/null || true
+  fi
+  ln -s "$root/node_modules" "$wt/node_modules"
+  (cd "$wt" && bash scripts/build_package.bash --type managed > "$tmp/build-$name.log" 2>&1) \
+    || { echo "managed build failed for $name; log: $tmp/build-$name.log" >&2; tail -20 "$tmp/build-$name.log" >&2; return 1; }
+  for pkg in manabie-all-in-one manabie-all-in-one-ext; do
+    (cd "$wt/build" && sf project convert source --root-dir "$pkg" --output-dir "$tmp/out-$name-$pkg" >/dev/null 2>&1) \
+      || { echo "convert failed: $name $pkg" >&2; return 1; }
+    eval "n_${name}_${pkg//-/_}=$(find "$tmp/out-$name-$pkg" -type f | wc -l | tr -d ' ')"
+  done
+}
+
+current=$(git stash create 2>/dev/null); current=${current:-HEAD}
+echo "Building the managed packages in a temporary worktree (a few minutes)…" >&2
+count head "$current" with-untracked || exit 1
+[ "${1:-}" = --compare ] && { base=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD develop); count develop "$base" || exit 1; }
+
+if [ "${1:-}" = --compare ]; then printf '\n| Package | merge-base %s | this branch | Δ | Limit |\n| --- | ---: | ---: | ---: | ---: |\n' "$(git rev-parse --short "$base")"
+else printf '\n| Package | this branch | Limit |\n| --- | ---: | ---: |\n'; fi
+for pkg in manabie-all-in-one manabie-all-in-one-ext; do
+  v=n_head_${pkg//-/_}; h=${!v}
+  if [ "${1:-}" = --compare ]; then d=n_develop_${pkg//-/_}; b=${!d}; printf '| %s | %s | %s | %+d | 10,000 |\n' "$pkg" "$b" "$h" $((h-b))
+  else printf '| %s | %s | 10,000 |\n' "$pkg" "$h"; fi
+done

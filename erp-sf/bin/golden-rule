@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Golden rule for erp-salesforce: nothing that stays in Main may name an Ext component.
+#   golden-rule.sh          check Ext components added or changed on this branch (vs develop),
+#                           including uncommitted and untracked files
+#   golden-rule.sh --all    check every Ext component in the repo
+# Also runs the repo's check-no-main-lightning-component-overrides.mjs.
+# Exit 0 = clean, 1 = violations found.
+set -u
+export PATH="/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+if ! command -v node >/dev/null; then   # nvm installs are not on a non-login PATH
+  nvm_bin=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)
+  [[ -n "$nvm_bin" ]] && export PATH="$nvm_bin:$PATH"
+fi
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "Not in a git repo."; exit 2; }
+cd "$root"
+[[ -d packages ]] || { echo "No packages/ folder: run this from erp-salesforce."; exit 2; }
+
+if [[ "${1:-}" == "--all" ]]; then
+  scope="all Ext components"
+  files=$(git ls-files 'packages/*-ext/**')
+else
+  base=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD develop 2>/dev/null) \
+    || { echo "Cannot find develop to diff against; use --all."; exit 2; }
+  scope="Ext components changed since $(git rev-parse --short "$base") (merge-base with develop)"
+  files=$( { git diff --name-only --diff-filter=AMR "$base"; git ls-files --others --exclude-standard; } \
+    | grep -E '^packages/[^/]+-ext/' | sort -u)
+fi
+
+# Component name from a source path.
+name_of() {
+  local f=$1 b d
+  case "$f" in
+    */classes/*.cls|*/triggers/*.trigger|*/pages/*.page)
+      b=${f##*/}; echo "${b%.*}" ;;
+    */lwc/*/*)
+      d=${f#*/lwc/}; echo "${d%%/*}" ;;
+    */aura/*/*)
+      d=${f#*/aura/}; echo "${d%%/*}" ;;
+    */flexipages/*|*/layouts/*|*/quickActions/*|*/permissionsets/*|*/flows/*|*/tabs/*)
+      b=${f##*/}; echo "${b%-meta.xml}" | sed -E 's/\.(flexipage|layout|quickAction|permissionset|flow|tab)$//' ;;
+  esac
+}
+names=$(while IFS= read -r f; do [[ -n "$f" ]] && name_of "$f"; done <<<"$files" | sort -u)
+
+echo "Golden rule: $scope"
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+# pattern <TAB> component name; LWC also matched in markup as c-kebab-case
+while IFS= read -r n; do
+  [[ -z "$n" ]] && continue
+  printf '%s\t%s\n' "$n" "$n"
+  if [[ "$n" =~ ^[a-z][A-Za-z0-9]*$ ]]; then
+    printf 'c-%s\t%s\n' "$(sed -E 's/([A-Z])/-\1/g' <<<"$n" | tr '[:upper:]' '[:lower:]')" "$n"
+  fi
+done <<<"$names" > "$tmp/map"
+cut -f1 "$tmp/map" > "$tmp/pats"
+checked=$(grep -c . <<<"$names")
+
+# One search for every name. Comment lines and Jest tests are not packaged dependencies.
+if [[ -s "$tmp/pats" ]]; then
+  # --untracked: new Main files are usually not committed yet when this runs.
+  git grep --untracked -n -w -F -f "$tmp/pats" -- packages/ ':(exclude)packages/*-ext/**' ':(exclude)**/__tests__/**' 2>/dev/null \
+  | awk -F'\t' -v map="$tmp/map" '
+      BEGIN { while ((getline l < map) > 0) { split(l, f, "\t"); name[f[1]] = f[2] } }
+      {
+        line = $0; i = index(line, ":"); j = index(substr(line, i + 1), ":")
+        code = substr(line, i + j + 1)
+        if (code ~ /^[ \t]*(\/\/|\*|\/\*|<!--)/) next
+        for (p in name) {
+          # check every occurrence: the first may sit inside a longer word (Util in MyUtil)
+          # c-kebab tags also end at "-": c-my-comp is not c-my-comp-extra
+          postre = (p ~ /^c-/) ? "[A-Za-z0-9_-]" : "[A-Za-z0-9_]"
+          rest = code; off = 0
+          while ((k = index(rest, p)) > 0) {
+            pre = (off + k > 1) ? substr(code, off + k - 1, 1) : ""
+            post = substr(rest, k + length(p), 1)
+            if (pre !~ /[A-Za-z0-9_]/ && post !~ postre) { print name[p] "\t" line; break }
+            off += k; rest = substr(rest, k + 1)
+          }
+        }
+      }' | sort -u > "$tmp/hits"
+fi
+
+violations=$(cut -f1 "$tmp/hits" 2>/dev/null | sort -u | grep -c .)
+while IFS= read -r n; do
+  [[ -z "$n" ]] && continue
+  echo; echo "✗ Main names Ext component '$n':"
+  awk -F'\t' -v n="$n" '$1 == n { print "    " substr($2, 1, 220) }' "$tmp/hits"
+done < <(cut -f1 "$tmp/hits" 2>/dev/null | sort -u)
+echo; echo "Checked $checked Ext component name(s); $violations violation(s). Comment lines and __tests__ are skipped."
+
+override_rc=0
+chk=scripts/flexipage-assignment-update/check-no-main-lightning-component-overrides.mjs
+if [[ -f "$chk" ]]; then
+  echo; echo "Main LightningComponent overrides check:"
+  if command -v node >/dev/null; then node "$chk"; override_rc=$?
+  else echo "  node not found; skipped."; fi
+fi
+
+[[ "$violations" -eq 0 && $override_rc -eq 0 ]] && exit 0 || exit 1

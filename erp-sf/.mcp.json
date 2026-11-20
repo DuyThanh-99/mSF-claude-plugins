@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sf-local": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/sf-mcp",
+      "args": ["--orgs", "${user_config.local_org}", "--toolsets", "orgs,metadata,data,users,testing"]
+    },
+    "sf-shared": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/sf-mcp",
+      "args": ["--orgs", "${user_config.shared_read_orgs}", "--toolsets", "data"]
+    }
+  }
+}

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Starts the Salesforce DX MCP server with whatever node/npx is available (nvm installs are not on a GUI PATH).
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+if ! command -v npx >/dev/null; then
+  nvm_bin=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)
+  [ -n "$nvm_bin" ] && export PATH="$nvm_bin:$PATH"
+fi
+command -v npx >/dev/null || { echo "sf-mcp: npx not found; install Node.js" >&2; exit 1; }
+exec npx -y @salesforce/mcp@0.30.15 "$@"

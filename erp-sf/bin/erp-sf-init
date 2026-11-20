@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Writes the erp-sf CLAUDE.md into the erp-salesforce clone you run it from.
+#   erp-sf-init          write CLAUDE.md if the repo has none
+#   erp-sf-init --force  replace an existing CLAUDE.md (the old one is kept as CLAUDE.md.bak)
+set -euo pipefail
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "Run this inside the erp-salesforce repo." >&2; exit 1; }
+[ -f "$root/sfdx-project.json" ] || { echo "$root has no sfdx-project.json; is this erp-salesforce?" >&2; exit 1; }
+tpl="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/reference/CLAUDE.template.md"
+dest="$root/CLAUDE.md"
+if [ -f "$dest" ] && [ "${1:-}" != "--force" ]; then
+  if cmp -s "$tpl" "$dest"; then echo "CLAUDE.md is already up to date."; else echo "CLAUDE.md exists and differs from the template; rerun with --force to replace it."; diff -u "$dest" "$tpl" || true; fi
+  exit 0
+fi
+[ -f "$dest" ] && cp "$dest" "$dest.bak"
+cp "$tpl" "$dest"
+echo "Wrote $dest"

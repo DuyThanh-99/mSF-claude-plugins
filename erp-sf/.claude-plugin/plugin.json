@@ -1,5 +1,31 @@
 {
   "name": "erp-sf",
   "version": "0.1.0",
-  "description": "Helpers for the erp-salesforce repo"
+  "description": "Helpers for the erp-salesforce repo",
+  "userConfig": {
+    "local_org": {
+      "type": "string",
+      "title": "Local scratch org",
+      "description": "Alias the sf-local MCP server may read and write (deploy, data, tests, permission sets).",
+      "default": "local_manabie"
+    },
+    "local_org_prefixes": {
+      "type": "string",
+      "title": "Local org alias prefixes",
+      "description": "Comma-separated alias prefixes the shared-org guard treats as local scratch orgs. Usernames ending in @example.com are always local.",
+      "default": "local_"
+    },
+    "shared_read_orgs": {
+      "type": "string",
+      "title": "Shared orgs for read-only queries",
+      "description": "Comma-separated aliases the sf-shared MCP server may query with SOQL only.",
+      "default": "staging,preprod"
+    }
+  },
+  "dependencies": [
+    "salesforce-development",
+    "experience-lwc",
+    "salesforce-code-quality",
+    "dx-org-lifecycle"
+  ]
 }

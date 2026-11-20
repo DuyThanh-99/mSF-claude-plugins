@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# mlocal - personal bootstrap for the local_manabie scratch org (certificate, credentials, sample data, synced student).
+# Code ships in the erp-sf plugin; config.env and logs stay per machine in $ML_HOME (~/.manabie-local).
+set -uo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d=$(cd -P "$(dirname "$src")" && pwd); src=$(readlink "$src"); [[ $src != /* ]] && src="$d/$src"; done
+ML_CODE=$(cd -P "$(dirname "$src")" && pwd); export ML_CODE
+ML_HOME="${ML_HOME:-$HOME/.manabie-local}"; export ML_HOME
+if [ ! -f "$ML_HOME/config.env" ]; then
+  echo "mlocal: no $ML_HOME/config.env on this machine." >&2
+  echo "  mkdir -p $ML_HOME && cp $ML_CODE/config.env.example $ML_HOME/config.env && chmod 600 $ML_HOME/config.env" >&2
+  echo "  then fill it in (see $ML_CODE/GUIDE.md, 'Set up a new machine')." >&2
+  exit 1
+fi
+source "$ML_CODE/lib/common.bash"
+cd "$REPO_ROOT" || { echo "mlocal: REPO_ROOT '$REPO_ROOT' not found; run from the erp-salesforce repo or set it in config.env" >&2; exit 1; }
+
+cmd="${1:-help}"; shift || true
+APPLY=1; for a in "$@"; do [ "$a" = "--dry-run" ] && APPLY=0; done
+export ORG_ALIAS REPO_ROOT
+
+s_perm()  { bash "$ML_CODE/steps/10-permissions.bash"; }
+s_cert()  { node "$ML_CODE/steps/20-cert.mjs" "$@"; }
+s_creds() { bash "$ML_CODE/steps/30-credentials.bash"; }
+s_data()  { log "Data: gap-fill sample data"; python3 "$ML_CODE/steps/40-data.py" $([ $APPLY = 1 ] && echo --apply); }
+s_fix()   { [ $APPLY = 1 ] || { log "Fixups: skipped in dry-run"; return 0; }; bash "$ML_CODE/steps/50-fixups.bash"; }
+s_sync()  { bash "$ML_CODE/steps/70-sync.bash" "$@"; }
+s_stud()  { bash "$ML_CODE/steps/60-student.bash" "$@"; }
+s_ver()   { bash "$ML_CODE/steps/90-verify.bash"; }
+
+case "$cmd" in
+  perm|permissions) s_perm ;;
+  cert)  s_cert "$@" ;;
+  creds|credentials) s_creds ;;
+  data)  s_data ;;
+  fix|fixups) s_fix ;;
+  sync)  s_sync "$@" ;;          # mlocal sync [--map-only]  <- run before each staging action
+  student) s_stud "$@" ;;        # mlocal student [LocationPartnerId]
+  verify|status) s_ver ;;
+  all)
+    sf org display -o "$ORG_ALIAS" >/dev/null 2>&1 || die "org $ORG_ALIAS not found (make start first)"
+    s_perm  || die "step permissions failed"
+    s_cert  || die "step cert failed (set JKS_PASSWORD in config.env, or: mlocal cert --manual)"
+    s_creds || die "step credentials failed"
+    s_data  || warn "data step reported failures (see table above)"
+    s_fix
+    s_sync
+    s_stud
+    s_ver ;;
+  reset)
+    read -r -p "This DELETES scratch org $ORG_ALIAS and runs make start. Type yes: " a; [ "$a" = "yes" ] || exit 1
+    make delete-scratch && make start && exec "$0" all ;;
+  help|*) cat <<USAGE
+mlocal <step>   (org: $ORG_ALIAS)
+  all        run every step in order, safe to re-run
+  perm       School Admin permission set group
+  cert       import the staging keystore as $CERT_NAME  [--probe | --manual]
+  creds      external + named credentials, principal access
+  data       gap-fill checked-in sample data   [--dry-run]
+  fix        academic year, product links, billing dates, sync switch
+  sync       make sync-local-data + push master data   [--map-only]   (run before each staging action)
+  student    create a student that syncs to staging    [LocationPartnerId]
+  verify     checks (callout auth, data, synced student)
+  reset      make delete-scratch && make start && all
+USAGE
+  ;;
+esac
