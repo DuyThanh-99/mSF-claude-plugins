@@ -20,6 +20,12 @@
       "title": "Shared orgs for read-only queries",
       "description": "Comma-separated aliases the sf-shared MCP server may query with SOQL only.",
       "default": "staging,preprod"
+    },
+    "salesforce_telemetry": {
+      "type": "boolean",
+      "title": "Allow salesforce-development telemetry",
+      "description": "Off by default: erp-sf turns off the usage telemetry of the salesforce-development plugin at each session start. Set to true to leave it to /salesforce-development:telemetry.",
+      "default": false
     }
   },
   "dependencies": [

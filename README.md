@@ -28,6 +28,7 @@ Private Claude Code plugins.
 | agent `sf-feature-builder` | Builds one slice of an approved spec, test-first |
 | hook `guard-shared-org.sh` | Asks before any write to an org that isn't a local scratch org: sf deploys and data writes, `sf config set target-org`, `sf alias set`, repo scripts, deploying `make` targets and `mlocal` steps. Every org the command names (`-o`, `ORG=`, a script argument that is a known alias) must be local; a write that names none uses `SF_TARGET_ORG`, then `.sf/config.json` |
 | hook `guard-git-commit.sh` | Asks before `git commit` / `git push` |
+| hook `sf-telemetry-off.sh` | At session start, turns off the `salesforce-development` plugin's usage telemetry on this machine (see below) |
 | MCP `sf-local` | Salesforce DX MCP, read/write, only the `local_org` option's org |
 | MCP `sf-shared` | Salesforce DX MCP, SOQL only, the `shared_read_orgs` option's orgs |
 | MCP `atlassian` | Atlassian Rovo MCP, v2 endpoint `https://mcp.atlassian.com/v2/mcp`, used by `sprint-planner`, `create-tdd` and `prd-to-feature`. Run `/mcp` once and authenticate `atlassian` (OAuth, your own Jira/Confluence permissions) |
@@ -36,7 +37,12 @@ Private Claude Code plugins.
 
 Installing `erp-sf` also installs these Salesforce plugins, re-listed here from [forcedotcom/sf-skills](https://github.com/forcedotcom/sf-skills) (Apache-2.0) and fetched from that repo: `salesforce-development`, `experience-lwc`, `salesforce-code-quality`, `dx-org-lifecycle`. They are pinned to sf-skills release `1.71.0` (`ref` + `sha` in `.claude-plugin/marketplace.json`), so an upstream change reaches teammates only through a PR here. To upgrade, set both `ref` and `sha` to a newer release tag and its commit, and read the upstream diff first, especially hooks and `.mcp.json`. To add another, list it in `.claude-plugin/marketplace.json` with a pinned `git-subdir` source and add it to `dependencies` in `erp-sf/.claude-plugin/plugin.json`. If `erp-sf` is already installed, install the new one directly: `claude plugin install <name>@msf-claude-plugins --scope local`.
 
-Options (`/plugin` > erp-sf > configure): `local_org` (default `local_manabie`), `local_org_prefixes` (default `local_`), `shared_read_orgs` (default `staging,preprod`).
+Options (`/plugin` > erp-sf > configure): `local_org` (default `local_manabie`), `local_org_prefixes` (default `local_`), `shared_read_orgs` (default `staging,preprod`), `salesforce_telemetry` (default `false`).
+
+**Telemetry.** `salesforce-development` collects usage telemetry by default and uploads it through the connected org. erp-sf turns it off at every session start by writing the plugin's own machine-wide opt-out (`~/.sf/telemetry/telemetry-config.json`, the same file `/salesforce-development:telemetry off` writes). To leave the choice to each person, set `salesforce_telemetry` to `true`. For a hard off that doesn't depend on the hook, add `"env": {"SF_DISABLE_TELEMETRY": "1"}` to `~/.claude/settings.json`; it also turns off the `sf` CLI's own telemetry.
+
+> [!WARNING]
+> **Never set `SFDX_AUTO_DEPLOY=1`.** It turns on a `salesforce-development` hook that deploys every file edited under `force-app/` to the default org whenever that org isn't production, which includes sandboxes such as staging and preprod. The deploy runs inside a hook, not through the Bash tool, so `guard-shared-org.sh` never sees it and can't ask first.
 
 `reference/` holds files several skills share: `package-placement.md`, `issue-tracker.md` and `domain.md` (the repo's agent docs), `CLAUDE.template.md`, `ci-gotchas.md` (known CI failures; add a row when a run teaches a new one) and `investigation-report.md`.
 
