@@ -7,9 +7,12 @@ export PATH="/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "Run inside erp-salesforce." >&2; exit 2; }
 cd "$root"; chk=scripts/permission-set-check/check_permission_sets.py
 [ -f "$chk" ] || { echo "No $chk here; is this erp-salesforce?" >&2; exit 2; }
-base=${1:-$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD develop)}
-list=$(mktemp); trap 'rm -f "$list"' EXIT
-{ git diff --name-only --diff-filter=ACR "$base"; git ls-files --others --exclude-standard; } | grep '^packages/' | sort -u > "$list"
+base=${1:-$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD develop 2>/dev/null)}
+[ -n "$base" ] || { echo "Cannot find develop to diff against (git fetch origin develop), or pass a base ref." >&2; exit 2; }
+git rev-parse --verify --quiet "$base^{commit}" >/dev/null || { echo "Base '$base' is not a commit." >&2; exit 2; }
+list=$(mktemp); trap 'rm -f "$list" "$list.diff"' EXIT
+git diff --name-only --diff-filter=ACR "$base" > "$list.diff" || { echo "git diff against $base failed." >&2; exit 2; }
+{ cat "$list.diff"; git ls-files --others --exclude-standard; } | grep '^packages/' | sort -u > "$list"
 echo "Added files under packages/ since $(git rev-parse --short "$base"): $(grep -c . "$list")"
 # System python: Homebrew python builds can lack a working XML parser.
 py=/usr/bin/python3; [ -x "$py" ] || py=python3

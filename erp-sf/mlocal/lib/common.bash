@@ -3,7 +3,9 @@ ML_HOME="${ML_HOME:-$HOME/.manabie-local}"
 ML_CODE="${ML_CODE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export ML_HOME ML_CODE
 # shellcheck disable=SC1091
+set -a   # export every config value, so node/python steps see what bash sees
 source "$ML_HOME/config.env"
+set +a
 ORG_ALIAS="${ORG_ALIAS:-local_manabie}"
 REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null)}"
 export ORG_ALIAS REPO_ROOT

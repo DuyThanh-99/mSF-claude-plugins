@@ -13,10 +13,22 @@ if [ ! -f "$ML_HOME/config.env" ]; then
   exit 1
 fi
 source "$ML_CODE/lib/common.bash"
-cd "$REPO_ROOT" || { echo "mlocal: REPO_ROOT '$REPO_ROOT' not found; run from the erp-salesforce repo or set it in config.env" >&2; exit 1; }
-
 cmd="${1:-help}"; shift || true
-APPLY=1; for a in "$@"; do [ "$a" = "--dry-run" ] && APPLY=0; done
+case "$cmd" in help|-h|--help) ;; *)
+  # cd "" succeeds and stays put, so check the repo before moving into it
+  if [ -z "$REPO_ROOT" ] || [ ! -f "$REPO_ROOT/sfdx-project.json" ]; then
+    echo "mlocal: REPO_ROOT '${REPO_ROOT}' is not the erp-salesforce repo; run from inside it or set REPO_ROOT in config.env" >&2; exit 1
+  fi
+  cd "$REPO_ROOT" || exit 1 ;;
+esac
+
+# --dry-run is honoured by data, fix and all (all then runs only the read-only steps).
+APPLY=1; args=()
+for a in "$@"; do if [ "$a" = "--dry-run" ]; then APPLY=0; else args+=("$a"); fi; done
+set -- ${args[@]+"${args[@]}"}
+if [ $APPLY = 0 ]; then
+  case "$cmd" in data|fix|fixups|all) ;; *) echo "mlocal: '$cmd' has no --dry-run; it always writes. Run it without --dry-run, or use: mlocal data --dry-run" >&2; exit 2 ;; esac
+fi
 export ORG_ALIAS REPO_ROOT
 
 s_perm()  { bash "$ML_CODE/steps/10-permissions.bash"; }
@@ -39,6 +51,10 @@ case "$cmd" in
   verify|status) s_ver ;;
   all)
     sf org display -o "$ORG_ALIAS" >/dev/null 2>&1 || die "org $ORG_ALIAS not found (make start first)"
+    if [ $APPLY = 0 ]; then
+      log "Dry run: only the data plan and checks; permissions, cert, credentials, fixups, sync and student write, so they are skipped"
+      s_data; s_ver; exit 0
+    fi
     s_perm  || die "step permissions failed"
     s_cert  || die "step cert failed (set JKS_PASSWORD in config.env, or: mlocal cert --manual)"
     s_creds || die "step credentials failed"
@@ -51,13 +67,13 @@ case "$cmd" in
     read -r -p "This DELETES scratch org $ORG_ALIAS and runs make start. Type yes: " a; [ "$a" = "yes" ] || exit 1
     make delete-scratch && make start && exec "$0" all ;;
   help|*) cat <<USAGE
-mlocal <step>   (org: $ORG_ALIAS)
-  all        run every step in order, safe to re-run
+mlocal <step>   (org: ${ORG_ALIAS:-?})
+  all        run every step in order, safe to re-run   [--dry-run: data plan + checks only]
   perm       School Admin permission set group
-  cert       import the staging keystore as $CERT_NAME  [--probe | --manual]
+  cert       import the staging keystore as ${CERT_NAME:-?}  [--probe | --manual]
   creds      external + named credentials, principal access
   data       gap-fill checked-in sample data   [--dry-run]
-  fix        academic year, product links, billing dates, sync switch
+  fix        academic year, product links, billing dates, sync switch   [--dry-run: skip]
   sync       make sync-local-data + push master data   [--map-only]   (run before each staging action)
   student    create a student that syncs to staging    [LocationPartnerId]
   verify     checks (callout auth, data, synced student)

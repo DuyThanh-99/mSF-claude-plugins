@@ -59,7 +59,21 @@ try {
     if (!covers && !periods.isEmpty()) {
         Date first = periods[0].MANAERP__Start_Date__c;
         Integer d = (today.year() * 12 + today.month()) - (first.year() * 12 + first.month()) - 2; // first period two months before this month
-        for (MANAERP__Billing_Period__c b : periods) { b.MANAERP__Start_Date__c = b.MANAERP__Start_Date__c.addMonths(d); b.MANAERP__End_Date__c = b.MANAERP__Start_Date__c.addMonths(1).addDays(-1); }
+        // Shift start and end by the same d months, keeping each period's length (quarterly stays quarterly).
+        // Month-end ends stay month-end (Jan 31 -> Feb 28/29). A period that started the day after the
+        // previous one ended still does, so addMonths clamping on the 29th-31st cannot open a gap.
+        Date prevOldEnd = null;
+        Date prevNewEnd = null;
+        for (MANAERP__Billing_Period__c b : periods) {
+            Date s = b.MANAERP__Start_Date__c;
+            Date e = b.MANAERP__End_Date__c;
+            Boolean contiguous = prevOldEnd != null && s == prevOldEnd.addDays(1);
+            b.MANAERP__Start_Date__c = contiguous ? prevNewEnd.addDays(1) : s.addMonths(d);
+            Boolean monthEnd = e == e.toStartOfMonth().addMonths(1).addDays(-1);
+            b.MANAERP__End_Date__c = monthEnd ? e.toStartOfMonth().addMonths(d + 1).addDays(-1) : e.addMonths(d);
+            prevOldEnd = e;
+            prevNewEnd = b.MANAERP__End_Date__c;
+        }
         List<MANAERP__Billing_Ratio__c> ratios = [SELECT Id, MANAERP__Start_Date__c, MANAERP__End_Date__c FROM MANAERP__Billing_Ratio__c];
         for (MANAERP__Billing_Ratio__c r : ratios) {
             Boolean monthEnd = r.MANAERP__End_Date__c == r.MANAERP__End_Date__c.toStartOfMonth().addMonths(1).addDays(-1);

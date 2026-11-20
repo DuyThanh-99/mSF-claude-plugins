@@ -26,7 +26,7 @@ Private Claude Code plugins.
 | skills `tdd`, `to-tickets`, `implement`, `implement-spec` | Copied from mattpocock/skills (MIT) |
 | agent `placement-reviewer` | Read-only placement review of a branch before a PR |
 | agent `sf-feature-builder` | Builds one slice of an approved spec, test-first |
-| hook `guard-shared-org.sh` | Asks before any write to an org that isn't a local scratch org. Every `-o`/`--target-org` in the command must be local; a write with none uses `SF_TARGET_ORG`, then `.sf/config.json` |
+| hook `guard-shared-org.sh` | Asks before any write to an org that isn't a local scratch org: sf deploys and data writes, `sf config set target-org`, `sf alias set`, repo scripts, deploying `make` targets and `mlocal` steps. Every org the command names (`-o`, `ORG=`, a script argument that is a known alias) must be local; a write that names none uses `SF_TARGET_ORG`, then `.sf/config.json` |
 | hook `guard-git-commit.sh` | Asks before `git commit` / `git push` |
 | MCP `sf-local` | Salesforce DX MCP, read/write, only the `local_org` option's org |
 | MCP `sf-shared` | Salesforce DX MCP, SOQL only, the `shared_read_orgs` option's orgs |

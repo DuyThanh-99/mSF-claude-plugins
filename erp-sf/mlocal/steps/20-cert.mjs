@@ -8,15 +8,23 @@ import os from 'os';
 import path from 'path';
 
 const home = process.env.ML_HOME || path.join(os.homedir(), '.manabie-local');
-const cfg = Object.fromEntries(readFileSync(path.join(home, 'config.env'), 'utf8').split('\n')
+// mlocal exports config.env (sourced by bash, so quotes and $VARs are already resolved) plus the
+// defaults from common.bash; the file is parsed here only when this step runs on its own.
+const KEYS = ['ORG_ALIAS', 'REPO_ROOT', 'JKS_PATH', 'JKS_PASSWORD', 'CERT_NAME'];
+const fileCfg = existsSync(path.join(home, 'config.env')) ? Object.fromEntries(readFileSync(path.join(home, 'config.env'), 'utf8').split('\n')
   .filter((l) => /^[A-Z_]+=/.test(l)).map((l) => {
     const i = l.indexOf('=');
-    let v = l.slice(i + 1).replace(/\s+#.*$/, '').trim();
-    return [l.slice(0, i), v.replace(/^"|"$/g, '')];
-  }));
+    let v = l.slice(i + 1).trim();
+    const q = v.match(/^(["'])(.*)\1(\s+#.*)?$/);
+    v = q ? q[2] : v.replace(/\s+#.*$/, '').trim();
+    return [l.slice(0, i), v];
+  })) : {};
+const cfg = Object.fromEntries(KEYS.map((k) => [k, process.env[k] ?? fileCfg[k] ?? '']));
+cfg.ORG_ALIAS ||= 'local_manabie';
+if (!cfg.REPO_ROOT) { console.error('  FAIL REPO_ROOT is not set (run through mlocal, or set it in config.env)'); process.exit(2); }
 const probe = process.argv.includes('--probe');
 const manual = process.argv.includes('--manual');
-const require = createRequire(path.join(cfg.REPO_ROOT || process.env.REPO_ROOT, 'package.json'));
+const require = createRequire(path.join(cfg.REPO_ROOT, 'package.json'));
 const { chromium } = require('playwright');
 mkdirSync(path.join(home, 'logs'), { recursive: true });
 const shot = async (page, name) => page.screenshot({ path: path.join(home, 'logs', `cert-${name}.png`), fullPage: true }).catch(() => {});
@@ -28,14 +36,29 @@ if (q.result.totalSize > 0 && !probe) { console.log(`  ok  certificate ${cfg.CER
 if (!probe && !manual && !cfg.JKS_PASSWORD) { console.error('  FAIL JKS_PASSWORD is empty in config.env (or run: mlocal cert --manual)'); process.exit(2); }
 if (!existsSync(cfg.JKS_PATH)) { console.error(`  FAIL keystore not found: ${cfg.JKS_PATH}`); process.exit(2); }
 
-const cache = path.join(os.homedir(), 'Library/Caches/ms-playwright');
-const chromeDir = readdirSync(cache).filter((d) => d.startsWith('chromium-')).sort().pop();
-const exe = chromeDir && readdirSync(path.join(cache, chromeDir)).map((a) => path.join(cache, chromeDir, a,
-  'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing')).find(existsSync);
+// Prefer the newest Chrome for Testing in the Playwright cache (macOS layout). If there is no cache
+// or no match, leave executablePath unset and let Playwright use its own default browser.
+const cacheDirs = [process.env.PLAYWRIGHT_BROWSERS_PATH, path.join(os.homedir(), 'Library/Caches/ms-playwright'),
+  path.join(os.homedir(), '.cache/ms-playwright')].filter((d) => d && existsSync(d));
+const ls = (d) => { try { return readdirSync(d); } catch { return []; } };
+let exe;
+for (const cache of cacheDirs) {
+  const chromeDir = ls(cache).filter((d) => d.startsWith('chromium-')).sort().pop();
+  exe = chromeDir && ls(path.join(cache, chromeDir)).map((a) => path.join(cache, chromeDir, a,
+    'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing')).find(existsSync);
+  if (exe) break;
+}
 
 const open = JSON.parse(execFileSync('sf', ['org', 'open', '-o', cfg.ORG_ALIAS, '--path', '/lightning/setup/CertificatesAndKeysManagement/home', '--url-only', '--json'],
   { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
-const browser = await chromium.launch({ headless: !manual, executablePath: exe });
+let browser;
+try {
+  browser = await chromium.launch({ headless: !manual, executablePath: exe });
+} catch (e) {
+  console.error(`  FAIL could not start Chromium: ${e.message.split('\n')[0]}`);
+  console.error(`  Install the browser once: (cd "${cfg.REPO_ROOT}" && npx playwright install chromium), then rerun mlocal cert`);
+  process.exit(1);
+}
 const page = await (await browser.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
 try {
   await page.goto(open.result.url, { waitUntil: 'commit' }).catch(() => {}); // login redirect chain interrupts goto

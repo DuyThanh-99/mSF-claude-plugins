@@ -37,8 +37,14 @@ name_of() {
       d=${f#*/lwc/}; echo "${d%%/*}" ;;
     */aura/*/*)
       d=${f#*/aura/}; echo "${d%%/*}" ;;
-    */flexipages/*|*/layouts/*|*/quickActions/*|*/permissionsets/*|*/flows/*|*/tabs/*)
-      b=${f##*/}; echo "${b%-meta.xml}" | sed -E 's/\.(flexipage|layout|quickAction|permissionset|flow|tab)$//' ;;
+    */flexipages/*|*/layouts/*|*/quickActions/*|*/permissionsets/*|*/flows/*|*/tabs/*|*/customPermissions/*)
+      b=${f##*/}; echo "${b%-meta.xml}" | sed -E 's/\.(flexipage|layout|quickAction|permissionset|flow|tab|customPermission)$//' ;;
+    */staticresources/*)   # X.resource-meta.xml, X.resource, X.zip, or an unzipped folder X/...
+      d=${f#*/staticresources/}; d=${d%%/*}; echo "${d%%.*}" ;;
+    */messageChannels/*)   # referenced as X__c
+      b=${f##*/}; echo "${b%%.*}__c" ;;
+    */labels/*.labels-meta.xml)   # every label in the file: Label.X, $Label.c.X, @salesforce/label/c.X
+      [[ -f "$f" ]] && sed -nE 's/.*<fullName>([^<]+)<\/fullName>.*/\1/p' "$f" ;;
   esac
 }
 names=$(while IFS= read -r f; do [[ -n "$f" ]] && name_of "$f"; done <<<"$files" | sort -u)
