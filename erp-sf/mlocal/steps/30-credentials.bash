@@ -17,18 +17,18 @@ JSON
 EC="$D/externalCredentials/SF_Manabie_JWT.externalCredential-meta.xml"
 cp "$SRC/externalCredentials/SF_Manabie_JWT.externalCredential-meta.xml" "$EC"
 # certificate + kid
-sed -i '' "s#SelfSignedCert_05Feb2024_061735#$CERT_NAME#g" "$EC"
+replace_literal "$EC" SelfSignedCert_05Feb2024_061735 "$CERT_NAME" all
 # iss
-sed -i '' "s#https://staging-manabie.my.salesforce.com#$JWT_ISS#" "$EC"
+replace_literal "$EC" https://staging-manabie.my.salesforce.com "$JWT_ISS"
 # org id and manabie id claims
-sed -i '' 's#{!$Organization.Id}#'"$JWT_ORG_ID"'#' "$EC"
-sed -i '' 's#{!$User.MANAERP__Manabie_Id__c}#'"$JWT_MANABIE_ID"'#' "$EC"
+replace_literal "$EC" '{!$Organization.Id}' "$JWT_ORG_ID"
+replace_literal "$EC" '{!$User.MANAERP__Manabie_Id__c}' "$JWT_MANABIE_ID"
 for nc in SF_Admin_Manabie_JWT SF_WebAPI_Manabie_JWT; do
   f="$D/namedCredentials/$nc.namedCredential-meta.xml"
   cp "$SRC/namedCredentials/$nc.namedCredential-meta.xml" "$f"
 done
-sed -i '' "s#https://admin.staging.manabie.io1#$ADMIN_URL#" "$D/namedCredentials/SF_Admin_Manabie_JWT.namedCredential-meta.xml"
-sed -i '' "s#https://web-api.staging-green.manabie.io1#$WEBAPI_URL#" "$D/namedCredentials/SF_WebAPI_Manabie_JWT.namedCredential-meta.xml"
+replace_literal "$D/namedCredentials/SF_Admin_Manabie_JWT.namedCredential-meta.xml" https://admin.staging.manabie.io1 "$ADMIN_URL"
+replace_literal "$D/namedCredentials/SF_WebAPI_Manabie_JWT.namedCredential-meta.xml" https://web-api.staging-green.manabie.io1 "$WEBAPI_URL"
 ( cd "$TMP" && sf project deploy start -o "$ORG_ALIAS" -d force-app --ignore-conflicts --wait 10 --json 2>/dev/null ) \
   | jq -e '.result.status=="Succeeded"' >/dev/null || die "credential deploy failed"
 ok "external + named credentials deployed"

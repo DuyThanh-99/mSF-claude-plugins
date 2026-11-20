@@ -13,7 +13,7 @@ fi
 if [ "${1:-}" = "--map-only" ]; then exit 0; fi
 log "Sync: staging knows our ids? push billing + product offerings"
 res=$(apex_report "$ML_CODE/steps/70-sync.apex")
-batch=$(mktemp -t mlocal-offerings).apex
+tmpb=$(mktemp "${TMPDIR:-/tmp}/mlocal-offerings.XXXXXX"); batch="$tmpb.apex"   # GNU mktemp -t needs XXXXXX
 off=0; while [ $off -lt 40 ]; do
   sed "s/__OFFSET__/$off/" "$ML_CODE/steps/71-offerings.apex" > "$batch"
   r=$(apex_report "$batch")
@@ -21,7 +21,7 @@ off=0; while [ $off -lt 40 ]; do
   echo "$r" | grep -q "seen=5|" || break
   off=$((off + 5))
 done
-rm -f "$batch" "${batch%.apex}"
+rm -f "$batch" "$tmpb"
 echo "$res"
 echo "$res" | grep -q "offering-" && warn "some offerings failed (see above)"
 echo "$res" | grep -E "^known" | grep -vF 'missing=()' | grep -q . && warn "staging does not know some ids (missing=...)"
