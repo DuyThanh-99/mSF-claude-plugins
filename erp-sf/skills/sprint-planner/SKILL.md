@@ -24,18 +24,19 @@ Find PRD-backed child issues for LT epics. In discovery mode, find the current u
 -   Do not automatically change status, priority, labels, or the Epic. Show these as unchanged unless the user explicitly edits them in the review.
 -   Discovery mode scopes candidate Epic discovery to a rolling window from one month before through one month after execution time, using Jira's dynamic `created` date functions. Direct-target mode uses the explicitly supplied Epic key and does not apply this scope predicate. Child-count queries remain unrestricted by date.
 ## Required tools
-Load the `jira` skill before starting. Use these Jira MCP tools:
+Use the plugin's `atlassian` MCP server (Atlassian Rovo MCP, v2 endpoint `https://mcp.atlassian.com/v2/mcp`; tools are `mcp__plugin_erp-sf_atlassian__*`). Load the ones you need with one ToolSearch `select:` call. If they're missing or unauthenticated, ask the user to run `/mcp` and authenticate `atlassian`. Tools that aren't listed directly are deferred: find them with `discover` and run them with `executeRead` (reads) or `executeWrite` (writes). Tools used:
 -   `atlassianUserInfo`
 -   `searchJiraIssuesUsingJql`
 -   `getJiraIssue`
--   `getJiraIssueRemoteIssueLinks` when the Jira description does not contain the PRD URL
--   `getConfluencePage`
--   `getJiraProjectIssueTypesMetadata` or `getJiraIssueTypeMetaWithFields` when issue-type or field IDs need confirmation
+-   `listJiraIssueRemoteIssueLinks` when the Jira description does not contain the PRD URL
+-   `getConfluenceContent` for the PRD page
+-   `listJiraProjectIssueTypesMetadata` or `getJiraIssueTypeMetaWithFields` when issue-type or field IDs need confirmation
+-   `listJiraBoardSprints` for the next sprint
 -   `createJiraIssue` only after final approval
 If `createJiraIssue` is unavailable, stop before any write and tell the user that the Jira MCP configuration must expose it. Do not bypass MCP with tokens, curl, or an unapproved integration.
 ## Workflow
 ### 1. Preflight and identity
-1. Load `jira`.
+1. Load the Atlassian tools (see Required tools).
 2. Call `atlassianUserInfo` and capture the account ID and display name.
 3. Confirm the Jira MCP connection can perform read operations.
 4. Resolve the next sprint before proposing any issue. Never silently assume a sprint.
@@ -101,7 +102,7 @@ For each selected epic, resolve the PRD in this order:
 3. A linked PBT issue only when it provides the PRD source.
 4. A Confluence page found by exact epic/PRD title search, only when the match is unambiguous.
 
-Fetch the full page as Markdown with `getConfluencePage`. Cache page content by page ID during the run.
+Fetch the full page as Markdown with `getConfluenceContent`. Cache page content by page ID during the run.
 
 Extract, in source order:
 

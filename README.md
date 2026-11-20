@@ -10,7 +10,7 @@ Private Claude Code plugins.
 
 | Piece | What it does |
 | --- | --- |
-| skill `package-placement` | Main vs Ext placement steps; reads the rules from `docs/agents/package-placement.md` in the repo |
+| skill `package-placement` | Main vs Ext placement steps; reads the rules from this plugin's `reference/package-placement.md` |
 | skill `golden-rule` (`/erp-sf:golden-rule [--all]`) | Runs `bin/golden-rule`: nothing in Main may name an Ext component, plus the override guard |
 | skill `local-org` | When and how to run `mlocal` on `local_manabie` |
 | skill `create-tdd` (`/erp-sf:create-tdd LT-xxxxx`) | Draft a TDD for a Jira epic as a Confluence draft |
@@ -18,7 +18,7 @@ Private Claude Code plugins.
 | skill `sprint-planner` (`/erp-sf:sprint-planner`) | Plan PRD-backed Feature/Demo children for LT epics, preview before Jira writes |
 | skill `ci-fix` (`/erp-sf:ci-fix <run URL or log>`) | Fetch the failing CI log, classify it against `reference/ci-gotchas.md`, decide if the branch caused it, reproduce, fix without committing, report |
 | skill `org-investigate` (`/erp-sf:org-investigate <ticket> [alias] [login URL]`) | Read-only root-cause investigation in a customer or shared org: pin its package version to a git tag, collect evidence, report |
-| skill `verify` (`/erp-sf:verify`) | Local checks with evidence before handing work back |
+| skill `verify` (`/erp-sf:verify`) | Drives the change end to end in the `local_manabie` scratch org UI (headless Playwright, `sf org open` login) and reports evidence |
 | skills `grill-with-docs`, `grilling`, `domain-modeling`, `pr`, `writing-for-agents`, `to-spec`, `diagnosing-bugs` | Copied from mattpocock/skills (MIT, see `erp-sf/THIRD_PARTY_NOTICES.md`) |
 | skill `ext-move-playbook` | Move a trigger, Apex or LWC/Aura override from Main to Ext, or roll it back |
 | skill `apex-conventions` | Team Apex rules: sharing, USER_MODE with a graceful guard, no User inserts in tests, timezone-independent test data |
@@ -30,6 +30,7 @@ Private Claude Code plugins.
 | hook `guard-git-commit.sh` | Asks before `git commit` / `git push` |
 | MCP `sf-local` | Salesforce DX MCP, read/write, only the `local_org` option's org |
 | MCP `sf-shared` | Salesforce DX MCP, SOQL only, the `shared_read_orgs` option's orgs |
+| MCP `atlassian` | Atlassian Rovo MCP, v2 endpoint `https://mcp.atlassian.com/v2/mcp`, used by `sprint-planner`, `create-tdd` and `prd-to-feature`. Run `/mcp` once and authenticate `atlassian` (OAuth, your own Jira/Confluence permissions) |
 | `bin/` | On the Bash tool's PATH: `golden-rule`, `perm-check`, `file-count [--compare]`, `mlocal`, `erp-sf-init` (writes the repo's `CLAUDE.md`), `erp-sf-root`, `sf-mcp` |
 | `mlocal/` | mlocal code; per-machine config stays in `~/.manabie-local/config.env` (see `mlocal/GUIDE.md`) |
 

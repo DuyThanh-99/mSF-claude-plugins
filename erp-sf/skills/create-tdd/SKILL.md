@@ -16,7 +16,7 @@ Draft a TDD for the epic in `$ARGUMENTS`, following the team template, and leave
 | Worked example (tone, depth) | Confluence page `2976481350` (LT-112562) |
 | Default parent folder for TDDs | `1351450670` (use the id from `$ARGUMENTS` if given) |
 
-The Atlassian tools are `mcp__plugin_design_atlassian__*`. Load the ones you need with one ToolSearch `select:` call. If they're missing, start auth with `mcp__plugin_design_atlassian__authenticate` and send the user the URL.
+Use the plugin's `atlassian` MCP server (Atlassian Rovo MCP, v2 endpoint `https://mcp.atlassian.com/v2/mcp`; tools are `mcp__plugin_erp-sf_atlassian__*`). Load the ones you need with one ToolSearch `select:` call. If they're missing or unauthenticated, ask the user to run `/mcp` and authenticate `atlassian`. Tools that aren't listed directly are deferred: find them with `discover` and run them with `executeRead` (reads) or `executeWrite` (writes).
 
 ## Steps
 
@@ -25,9 +25,9 @@ The Atlassian tools are `mcp__plugin_design_atlassian__*`. Load the ones you nee
 The step is done when you hold all five of these, or have recorded which one doesn't exist:
 
 1. **Epic.** `getJiraIssue` on the key. Note summary, assignee, status, and the PRD link in the description. `atlassianUserInfo` gives the author's name and account id.
-2. **PRD.** `getConfluencePage` (markdown). Read it in full: scope, out of scope, prerequisites, every AC, the Patterns tables, Design and Translation.
+2. **PRD.** `getConfluenceContent` (markdown). Read it in full: scope, out of scope, prerequisites, every AC, the Patterns tables, Design and Translation.
 3. **Template and example.** Fetch both every run, because the template changes. The template is the source of truth for section order and field names.
-4. **Test case page.** `searchConfluenceUsingCql` with `title ~ "<KEY>" AND space = CC AND type = page`. Note its URL, the QA owner, and the TC range.
+4. **Test case page.** `searchConfluence` with the CQL `title ~ "<KEY>" AND space = CC AND type = page`. Note its URL, the QA owner, and the TC range.
 5. **Code.** Run `git log --all --oneline -i --grep=<KEY>`. For each commit, read `git show --stat <sha>`, then read the new and changed classes, LWC, objects/fields, permission sets and labels with `git show <sha>:<path>`. The commit is often on `develop`, not the current branch. If no commit exists, explore the codebase for the components the PRD touches and write the design as **Proposed**.
 
 Large Confluence results are written to a file. Extract the body with `python3 -I -c "import json,sys; …"` into the scratchpad and Read that.
