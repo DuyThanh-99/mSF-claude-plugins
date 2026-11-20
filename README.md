@@ -6,6 +6,8 @@ Private Claude Code plugins.
 | --- | --- |
 | `erp-sf` | Helpers for the erp-salesforce repo |
 
+**New to erp-sf? Start with the [usage guide](erp-sf/GUIDE.md):** setup, the commands you run, the common workflows, what the guards ask, and troubleshooting. The table below lists every piece for reference.
+
 ## erp-sf contents
 
 | Piece | What it does |
