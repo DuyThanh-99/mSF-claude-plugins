@@ -1,0 +1,33 @@
+{
+  "description": "erp-sf guards: ask before writes to shared Salesforce orgs and before git commit/push; keep salesforce-development telemetry off",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-shared-org.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-git-commit.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/sf-telemetry-off.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

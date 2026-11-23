@@ -1,11 +1,58 @@
 {
-  "name": "my-plugins",
-  "owner": { "name": "Duy Thanh" },
+  "name": "msf-claude-plugins",
+  "owner": {
+    "name": "Duy Thanh"
+  },
   "plugins": [
     {
       "name": "erp-sf",
       "source": "./erp-sf",
       "description": "Helpers for the erp-salesforce repo"
+    },
+    {
+      "name": "salesforce-development",
+      "description": "Salesforce official: Apex, metadata, SOQL, deploy/retrieve skills and MCP servers (re-listed from forcedotcom/sf-skills, Apache-2.0)",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/forcedotcom/sf-skills.git",
+        "path": "plugins/builder/salesforce-development",
+        "ref": "1.71.0",
+        "sha": "431c50f69746c84c6348c19778b71d6ad257f696"
+      }
+    },
+    {
+      "name": "experience-lwc",
+      "description": "Salesforce official: LWC, LDS and accessibility skills (re-listed from forcedotcom/sf-skills, Apache-2.0)",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/forcedotcom/sf-skills.git",
+        "path": "plugins/builder/experience-lwc",
+        "ref": "1.71.0",
+        "sha": "431c50f69746c84c6348c19778b71d6ad257f696"
+      }
+    },
+    {
+      "name": "salesforce-code-quality",
+      "description": "Salesforce official: Code Analyzer skills (re-listed from forcedotcom/sf-skills, Apache-2.0)",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/forcedotcom/sf-skills.git",
+        "path": "plugins/builder/salesforce-code-quality",
+        "ref": "1.71.0",
+        "sha": "431c50f69746c84c6348c19778b71d6ad257f696"
+      }
+    },
+    {
+      "name": "dx-org-lifecycle",
+      "description": "Salesforce official: org switching, Dev Hub, permission-set assignment, sandbox skills (re-listed from forcedotcom/sf-skills, Apache-2.0)",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/forcedotcom/sf-skills.git",
+        "path": "plugins/builder/dx-org-lifecycle",
+        "ref": "1.71.0",
+        "sha": "431c50f69746c84c6348c19778b71d6ad257f696"
+      }
     }
-  ]
+  ],
+  "description": "Private Claude Code plugins for Manabie Salesforce work"
 }
